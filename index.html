@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>單車上坡功率計算器（公制）</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Microsoft JhengHei UI", "Noto Sans TC", sans-serif; }
+    body { margin:0; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+    .card { background:#fff; border:1px solid #e6e8ef; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.06); padding:16px; }
+    h1 { font-size:20px; margin:0 0 10px; }
+    h2 { font-size:16px; margin:18px 0 10px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    @media (max-width: 780px){ .grid { grid-template-columns: 1fr; } }
+    label { display:block; font-size:13px; color:#333; margin-bottom:6px; }
+    input[type="number"], input[type="text"]{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d7dbe8;
+      outline:none; font-size:15px; background:#fff;
+    }
+    input:disabled{ background:#f1f3f8; color:#777; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn{
+      border:1px solid #cfd5e6; background:#fff; padding:10px 14px; border-radius:10px;
+      cursor:pointer; font-weight:600;
+    }
+    .btn.primary{ background:#111; color:#fff; border-color:#111; }
+    .hint { color:#666; font-size:12px; margin-top:6px; }
+    .opt { display:flex; gap:8px; align-items:center; }
+    .err{ color:#b00020; font-size:13px; white-space: pre-wrap; }
+    .kvs { display:grid; grid-template-columns: 220px 1fr; gap:10px; }
+    @media (max-width: 780px){ .kvs { grid-template-columns: 1fr; } }
+    .kv { padding:10px 12px; border-radius:12px; border:1px solid #eef0f6; background:#fafbff; }
+    .k { color:#555; font-size:13px; margin-bottom:4px; }
+    .v { font-size:16px; font-weight:700; }
+    .v.small { font-size:14px; font-weight:600; color:#222; }
+    textarea{ width:100%; padding:10px; border-radius:12px; border:1px solid #d7dbe8; font-size:13px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>單車上坡功率計算器（公制・工程版）</h1>
+
+      <div class="grid">
+        <div>
+          <h2>基本輸入</h2>
+          <div class="grid">
+            <div>
+              <label>體重 (kg)</label>
+              <input id="personKg" type="number" step="0.1" min="0" placeholder="例如 80">
+            </div>
+            <div>
+              <label>單車重量 (kg)</label>
+              <input id="bikeKg" type="number" step="0.1" min="0" placeholder="例如 10">
+            </div>
+            <div>
+              <label>坡度 (%)</label>
+              <input id="gradePct" type="text" placeholder="例如 5 或 5%">
+              <div class="hint">小角度近似：sin(θ) ≈ 坡度/100</div>
+            </div>
+            <div>
+              <label>速度 (km/h)</label>
+              <input id="speedKmh" type="number" step="0.1" min="0" placeholder="例如 24">
+            </div>
+          </div>
+
+          <h2>進階阻力（可選）</h2>
+          <div class="row" style="margin-bottom:8px;">
+            <label class="opt"><input id="useRoll" type="checkbox" checked onchange="syncToggles()"> 加入滾動阻力</label>
+            <label class="opt"><input id="useAero" type="checkbox" checked onchange="syncToggles()"> 加入空氣阻力</label>
+            <label class="opt"><input id="useEta" type="checkbox" onchange="syncToggles()"> 加入傳動效率 η</label>
+          </div>
+
+          <div class="grid">
+            <div>
+              <label>Crr（滾阻係數）</label>
+              <input id="crr" type="number" step="0.0001" min="0" value="0.004">
+            </div>
+            <div>
+              <label>η（效率 0~1）</label>
+              <input id="eta" type="number" step="0.001" min="0" max="1" value="0.97" disabled>
+            </div>
+            <div>
+              <label>rho（空氣密度 kg/m³）</label>
+              <input id="rho" type="number" step="0.001" min="0" value="1.226">
+            </div>
+            <div>
+              <label>CdA（迎風面積 m²）</label>
+              <input id="cda" type="number" step="0.01" min="0" value="0.32">
+            </div>
+            <div>
+              <label>迎風 (km/h)（迎風正，順風負）</label>
+              <input id="windKmh" type="number" step="0.1" value="0">
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn primary" onclick="calc()">計算</button>
+            <button class="btn" onclick="fillExample()">填入範例</button>
+            <button class="btn" onclick="clearAll()">清除</button>
+            <button class="btn" onclick="copyResult()">複製結果</button>
+          </div>
+
+          <div id="err" class="err" style="margin-top:10px;"></div>
+          <div class="hint" style="margin-top:6px;">
+            若仍沒反應：請按 F12 → Console 看錯誤訊息（我也會顯示在上面紅字區）。
+          </div>
+        </div>
+
+        <div>
+          <h2>計算結果</h2>
+          <div class="kvs">
+            <div class="kv"><div class="k">總質量</div><div class="v" id="outMass">-</div></div>
+            <div class="kv"><div class="k">速度</div><div class="v" id="outV">-</div></div>
+
+            <div class="kv"><div class="k">爬升率 (m/s)</div><div class="v small" id="outVv">-</div></div>
+            <div class="kv"><div class="k">爬升率 (m/min)</div><div class="v small" id="outVvMin">-</div></div>
+
+            <div class="kv"><div class="k">重力分量推力</div><div class="v small" id="outFg">-</div></div>
+            <div class="kv"><div class="k">滾動阻力</div><div class="v small" id="outFr">-</div></div>
+
+            <div class="kv"><div class="k">空氣阻力</div><div class="v small" id="outFa">-</div></div>
+            <div class="kv"><div class="k">總推力</div><div class="v" id="outFt">-</div></div>
+
+            <div class="kv"><div class="k">輪上功率</div><div class="v small" id="outPw">-</div></div>
+            <div class="kv"><div class="k">人輸出功率</div><div class="v" id="outPr">-</div></div>
+
+            <div class="kv"><div class="k">換算馬力</div><div class="v small" id="outHp">-</div></div>
+            <div class="kv"><div class="k">推力比（W/kg，以體重）</div><div class="v" id="outWkgP">-</div></div>
+
+            <div class="kv"><div class="k">推力比（W/kg，以人+車）</div><div class="v small" id="outWkgT">-</div></div>
+          </div>
+
+          <h2 style="margin-top:18px;">輸出文字</h2>
+          <textarea id="outText" rows="10"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function setEnabled(id, enabled){
+    $(id).disabled = !enabled;
+  }
+
+  function fmt(x, digits=2){
+    if (!Number.isFinite(x)) return "-";
+    return x.toFixed(digits);
+  }
+
+  function parseNumber(text, fieldName){
+    let s = (text ?? "").toString().trim().replace(/%/g, "").trim();
+    if (s === "") throw new Error(`${fieldName} 不能空白`);
+    const x = Number(s);
+    if (!Number.isFinite(x)) throw new Error(`${fieldName} 不是合法數字`);
+    return x;
+  }
+
+  function syncToggles(){
+    try{
+      setEnabled("crr", $("useRoll").checked);
+      const aero = $("useAero").checked;
+      ["rho","cda","windKmh"].forEach(id => setEnabled(id, aero));
+      setEnabled("eta", $("useEta").checked);
+      $("err").textContent = "";
+    }catch(e){
+      $("err").textContent = "syncToggles 錯誤：\n" + e.message;
+    }
+  }
+
+  function calc(){
+    $("err").textContent = "";
+    try{
+      const g = 9.81;
+
+      const personKg = parseNumber($("personKg").value, "體重 (kg)");
+      const bikeKg   = parseNumber($("bikeKg").value, "單車重量 (kg)");
+      const gradePct = parseNumber($("gradePct").value, "坡度 (%)");
+      const speedKmh = parseNumber($("speedKmh").value, "速度 (km/h)");
+
+      if (personKg <= 0) throw new Error("體重必須 > 0");
+      if (bikeKg < 0) throw new Error("單車重量不可為負數");
+      if (speedKmh < 0) throw new Error("速度不可為負數");
+
+      const useRoll = $("useRoll").checked;
+      const useAero = $("useAero").checked;
+      const useEta  = $("useEta").checked;
+
+      const v = speedKmh / 3.6;        // m/s
+      const grade = gradePct / 100.0;  // sin(theta) approx
+      const totalMass = personKg + bikeKg;
+
+      const Fg = totalMass * g * grade;
+
+      let Fr = 0;
+      if (useRoll){
+        const crr = parseNumber($("crr").value, "Crr");
+        if (crr < 0) throw new Error("Crr 不可為負數");
+        Fr = totalMass * g * crr;
+      }
+
+      let Fa = 0;
+      if (useAero){
+        const rho = parseNumber($("rho").value, "rho (kg/m³)");
+        const cda = parseNumber($("cda").value, "CdA (m²)");
+        const windKmh = parseNumber($("windKmh").value, "迎風 (km/h)");
+        if (rho <= 0) throw new Error("rho 必須 > 0");
+        if (cda < 0) throw new Error("CdA 不可為負數");
+        const wind = windKmh / 3.6;
+        const vAir = v + wind;
+        Fa = 0.5 * rho * cda * Math.abs(vAir) * vAir;
+      }
+
+      const Ft = Fg + Fr + Fa;
+      const Pw = Ft * v;
+
+      let eta = 1.0;
+      if (useEta){
+        eta = parseNumber($("eta").value, "η（效率）");
+        if (!(eta > 0 && eta <= 1)) throw new Error("η 請輸入 0~1（例如 0.97）");
+      }
+
+      const Pr = Pw / eta;
+
+      const vv = v * grade;
+      const vvMin = vv * 60;
+
+      const wkgPerson = Pr / personKg;
+      const wkgTotal  = Pr / totalMass;
+
+      $("outMass").textContent = `${fmt(totalMass,2)} kg`;
+      $("outV").textContent    = `${fmt(v,2)} m/s`;
+
+      $("outVv").textContent   = `${fmt(vv,3)} m/s`;
+      $("outVvMin").textContent= `${fmt(vvMin,2)} m/min`;
+
+      $("outFg").textContent   = `${fmt(Fg,2)} N`;
+      $("outFr").textContent   = useRoll ? `${fmt(Fr,2)} N` : "-";
+      $("outFa").textContent   = useAero ? `${fmt(Fa,2)} N` : "-";
+      $("outFt").textContent   = `${fmt(Ft,2)} N`;
+
+      $("outPw").textContent   = `${fmt(Pw,1)} W`;
+      $("outPr").textContent   = `${fmt(Pr,1)} W`;
+      $("outHp").textContent   = `${fmt(Pr/745.7,3)} hp`;
+
+      $("outWkgP").textContent = `${fmt(wkgPerson,2)} W/kg`;
+      $("outWkgT").textContent = `${fmt(wkgTotal,2)} W/kg`;
+
+      const lines = [
+        "=== 單車上坡功率計算結果（公制）===",
+        `體重：${fmt(personKg,2)} kg`,
+        `車重：${fmt(bikeKg,2)} kg`,
+        `總質量：${fmt(totalMass,2)} kg`,
+        `坡度：${fmt(gradePct,2)} %`,
+        `速度：${fmt(speedKmh,2)} km/h（${fmt(v,2)} m/s）`,
+        "",
+        `重力分量推力：${fmt(Fg,2)} N`,
+        `滾動阻力：${useRoll ? fmt(Fr,2) + " N" : "(未啟用)"}`,
+        `空氣阻力：${useAero ? fmt(Fa,2) + " N" : "(未啟用)"}`,
+        `總推力：${fmt(Ft,2)} N`,
+        "",
+        `輪上功率：${fmt(Pw,1)} W`,
+        `人輸出功率：${fmt(Pr,1)} W（${fmt(Pr/745.7,3)} hp）`,
+        `推力比（W/kg，以體重）：${fmt(wkgPerson,2)} W/kg`,
+        `推力比（W/kg，以人+車）：${fmt(wkgTotal,2)} W/kg`,
+        "",
+        `爬升率：${fmt(vv,3)} m/s（${fmt(vvMin,2)} m/min）`,
+      ];
+      $("outText").value = lines.join("\n");
+
+    }catch(e){
+      $("err").textContent = "輸入錯誤：\n" + e.message;
+    }
+  }
+
+  function fillExample(){
+    $("personKg").value = "80";
+    $("bikeKg").value = "10";
+    $("gradePct").value = "5";
+    $("speedKmh").value = "24";
+    $("useRoll").checked = true;
+    $("useAero").checked = true;
+    $("useEta").checked  = false;
+    $("crr").value = "0.004";
+    $("rho").value = "1.226";
+    $("cda").value = "0.32";
+    $("windKmh").value = "0";
+    $("eta").value = "0.97";
+    syncToggles();
+    calc();
+  }
+
+  function clearAll(){
+    ["personKg","bikeKg","gradePct","speedKmh"].forEach(id => $(id).value = "");
+    $("outText").value = "";
+    $("err").textContent = "";
+    ["outMass","outV","outVv","outVvMin","outFg","outFr","outFa","outFt","outPw","outPr","outHp","outWkgP","outWkgT"]
+      .forEach(id => $(id).textContent = "-");
+  }
+
+  async function copyResult(){
+    const text = ($("outText").value || "").trim();
+    if (!text){ $("err").textContent = "沒有可複製的結果，請先按「計算」。"; return; }
+    try{
+      await navigator.clipboard.writeText(text);
+      $("err").textContent = "已複製到剪貼簿！";
+      setTimeout(()=>{ $("err").textContent = ""; }, 1200);
+    }catch(e){
+      $("err").textContent = "複製失敗（瀏覽器權限限制）。請手動全選右側文字框複製。";
+    }
+  }
+
+  // 讓 Enter 直接計算
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Enter") calc(); });
+
+  // 初始化
+  syncToggles();
+</script>
+</body>
+</html>
