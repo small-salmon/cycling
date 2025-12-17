@@ -3,102 +3,120 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>單車坡度功率（極簡版）</title>
+  <title>單車坡度功率</title>
   <style>
     body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; margin: 18px; }
     .card { max-width: 520px; margin: 0 auto; padding: 16px; border: 1px solid #ddd; border-radius: 14px; }
+    .title { font-size: 18px; font-weight: 800; }
+    .muted { color: #666; font-size: 13px; margin-top: 6px; line-height: 1.4; }
     .row { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }
     label { font-size: 14px; color: #333; }
-    input, select, button { width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; }
-    button { cursor: pointer; }
+    input, select, button { width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; box-sizing: border-box; }
+    button { cursor: pointer; font-weight: 700; }
     .out { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f6f6f6; line-height: 1.7; }
-    .kpi { font-size: 18px; font-weight: 700; }
-    .muted { color: #666; font-size: 13px; margin-top: 6px; }
+    .big { font-size: 18px; font-weight: 900; }
+    .hint { font-size: 12px; color:#777; margin-top: 8px; }
+    .two { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 420px){ .two { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="kpi">單車坡度功率（極簡版）</div>
-    <div class="muted">只留必填：人重、車重、時速、坡度、風況</div>
+    <div class="title">單車坡度功率（極簡完整版）</div>
+    <div class="muted">
+      輸入：人重、車重、時速、坡度、風況（不給客人填風速）<br>
+      輸出：總功率、W/kg（人+車）、等效迎風
+    </div>
 
     <div class="row">
-      <div>
-        <label>體重 (kg)</label>
-        <input id="wPerson" type="number" inputmode="decimal" value="70" min="1" step="0.1">
+      <div class="two">
+        <div>
+          <label>體重 (kg)</label>
+          <input id="wPerson" type="number" inputmode="decimal" value="70" min="1" step="0.1">
+        </div>
+        <div>
+          <label>車重 (kg)</label>
+          <input id="wBike" type="number" inputmode="decimal" value="9" min="0" step="0.1">
+        </div>
       </div>
 
-      <div>
-        <label>車重 (kg)</label>
-        <input id="wBike" type="number" inputmode="decimal" value="9" min="0" step="0.1">
-      </div>
-
-      <div>
-        <label>時速 (km/h)</label>
-        <input id="v" type="number" inputmode="decimal" value="30" min="1" step="0.1">
-      </div>
-
-      <div>
-        <label>坡度 (%)</label>
-        <input id="grade" type="number" inputmode="decimal" value="5" step="0.1">
+      <div class="two">
+        <div>
+          <label>時速 (km/h)</label>
+          <input id="v" type="number" inputmode="decimal" value="30" min="1" step="0.1">
+        </div>
+        <div>
+          <label>坡度 (%)</label>
+          <input id="grade" type="number" inputmode="decimal" value="5" step="0.1">
+        </div>
       </div>
 
       <div>
         <label>風況</label>
         <select id="preset">
           <option>無風</option>
-          <option>小順風</option>
-          <option>大順風</option>
-          <option>小逆風</option>
-          <option>大逆風</option>
+          <option>小順風（+5）</option>
+          <option>大順風（+15）</option>
+          <option>大順颱風（+40）</option>
+          <option>小逆風（+5）</option>
+          <option>大逆風（+15）</option>
+          <option>大逆颳風（+40）</option>
         </select>
       </div>
 
       <button id="btn">計算</button>
 
       <div id="out" class="out">請輸入後按「計算」。</div>
+      <div class="hint">註：此工具的「風況」是等效風速，用來快速估算體感與功率需求。</div>
     </div>
   </div>
 
   <script>
-    // 固定參數：不給客人選，保持極簡
+    // 固定參數：保持極簡，不給客人選
     const rho = 1.225;   // 空氣密度 kg/m^3
     const cda = 0.32;    // CdA m^2（一般騎姿）
     const Crr = 0.005;   // 滾阻係數（一般公路胎）
     const g = 9.80665;
 
+    // 你指定的風況：大順/大逆 = 15；颱風/颳風 = 40
+    // 注意：順風用車速 - 風速，逆風用車速 + 風速
     const WIND_PRESET = {
-      "無風":   { dir: "head", kmh: 0 },
-      "小順風": { dir: "tail", kmh: 5 },
-      "大順風": { dir: "tail", kmh: 10 },
-      "小逆風": { dir: "head", kmh: 5 },
-      "大逆風": { dir: "head", kmh: 10 },
+      "無風":             { dir: "head", kmh: 0 },
+
+      "小順風（+5）":     { dir: "tail", kmh: 5 },
+      "大順風（+15）":    { dir: "tail", kmh: 15 },
+      "大順颱風（+40）":  { dir: "tail", kmh: 40 },
+
+      "小逆風（+5）":     { dir: "head", kmh: 5 },
+      "大逆風（+15）":    { dir: "head", kmh: 15 },
+      "大逆颳風（+40）":  { dir: "head", kmh: 40 },
     };
 
-    function aero(vBikeKmh, windKmh, dir) {
+    function aeroPower(vBikeKmh, windKmh, dir) {
       const vBike = vBikeKmh / 3.6;
       const w = Math.abs(windKmh) / 3.6;
 
       let vRel;
-      if (dir === "head") vRel = vBike + w;
-      else if (dir === "tail") vRel = Math.max(0, vBike - w);
+      if (dir === "head") vRel = vBike + w;                 // 逆風：迎風更大
+      else if (dir === "tail") vRel = Math.max(0, vBike - w); // 順風：迎風變小（不小於0）
       else vRel = vBike;
 
       const Fdrag = 0.5 * rho * cda * (vRel ** 2);
-      const Paero = Fdrag * vBike; // 用對地車速乘阻力
+      const Paero = Fdrag * vBike; // 用對地車速乘阻力（估算騎士做功）
       return { vRel, Fdrag, Paero };
     }
 
-    function climbAndRollPower(mTotal, vBikeKmh, gradePct) {
+    function climbAndRollPower(mTotalKg, vBikeKmh, gradePct) {
       const v = vBikeKmh / 3.6;
       const grade = gradePct / 100.0;
 
-      // 用 grade 近似：sin(theta)=grade/sqrt(1+grade^2), cos(theta)=1/sqrt(1+grade^2)
+      // 以 grade 近似坡角：sin/cos 形式（避免小角度誤差）
       const denom = Math.sqrt(1 + grade*grade);
       const sinT = grade / denom;
       const cosT = 1 / denom;
 
-      const Fg = mTotal * g * sinT;        // 坡度重力
-      const Fr = Crr * mTotal * g * cosT;  // 滾阻
+      const Fg = mTotalKg * g * sinT;        // 坡度重力
+      const Fr = Crr * mTotalKg * g * cosT;  // 滾阻
       const Pgr = (Fg + Fr) * v;
 
       return { Fg, Fr, Pgr };
@@ -115,25 +133,25 @@
           !Number.isFinite(wBike)   || wBike < 0 ||
           !Number.isFinite(speed)   || speed <= 0 ||
           !Number.isFinite(grade)) {
-        document.getElementById("out").textContent = "請填入正確的數值。";
+        document.getElementById("out").textContent = "請填入正確的數值（體重>0、車重≥0、時速>0、坡度可正可負）。";
         return;
       }
 
       const mTotal = wPerson + wBike;
       const preset = WIND_PRESET[presetName] || WIND_PRESET["無風"];
 
-      const a = aero(speed, preset.kmh, preset.dir);
+      const a  = aeroPower(speed, preset.kmh, preset.dir);
       const cr = climbAndRollPower(mTotal, speed, grade);
 
-      const Ptotal = a.Paero + cr.Pgr;
-      const vRelKmh = a.vRel * 3.6;
-      const wkg_total = Ptotal / mTotal;
+      const Ptotal = a.Paero + cr.Pgr;      // 總功率（坡度+滾阻+風阻）
+      const vRelKmh = a.vRel * 3.6;         // 等效迎風
+      const wkg     = Ptotal / mTotal;      // W/kg（人+車）
 
       document.getElementById("out").innerHTML =
         `風況：<b>${presetName}</b><br>` +
         `等效迎風：<b>${vRelKmh.toFixed(1)} km/h</b><br>` +
-        `總功率：<b>${Ptotal.toFixed(0)} W</b>（含坡度+滾阻+風阻）<br>` +
-        `W/kg（人+車）：<b>${wkg_total.toFixed(2)} W/kg</b>`;
+        `總功率：<span class="big">${Ptotal.toFixed(0)} W</span><br>` +
+        `W/kg（人+車）：<b>${wkg.toFixed(2)} W/kg</b>`;
     });
   </script>
 </body>
