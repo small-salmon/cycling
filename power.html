@@ -49,12 +49,12 @@
         <label>風況</label>
         <select id="preset">
           <option>無風</option>
-          <option>小順風（+5）</option>
-          <option>大順風（+15）</option>
-          <option>大順颱風（+40）</option>
-          <option>小逆風（+5）</option>
-          <option>大逆風（+15）</option>
-          <option>大逆颳風（+40）</option>
+          <option>小順風</option>
+          <option>大順風</option>
+          <option>順超級颱風</option>
+          <option>小逆風</option>
+          <option>大逆風</option>
+          <option>逆超級颱風</option>
         </select>
       </div>
 
@@ -70,14 +70,17 @@
     const Crr = 0.005;
     const g = 9.80665;
 
+    // UI 不顯示數字，但內部仍用這些預設風速來計算
     const WIND_PRESET = {
-      "無風":             { dir: "head", kmh: 0 },
-      "小順風（+5）":     { dir: "tail", kmh: 5 },
-      "大順風（+15）":    { dir: "tail", kmh: 15 },
-      "大順颱風（+40）":  { dir: "tail", kmh: 40 },
-      "小逆風（+5）":     { dir: "head", kmh: 5 },
-      "大逆風（+15）":    { dir: "head", kmh: 15 },
-      "大逆颳風（+40）":  { dir: "head", kmh: 40 },
+      "無風":       { dir: "head", kmh: 0 },
+
+      "小順風":     { dir: "tail", kmh: 5 },
+      "大順風":     { dir: "tail", kmh: 15 },
+      "順超級颱風": { dir: "tail", kmh: 40 },
+
+      "小逆風":     { dir: "head", kmh: 5 },
+      "大逆風":     { dir: "head", kmh: 15 },
+      "逆超級颱風": { dir: "head", kmh: 40 },
     };
 
     function aeroPower(vBikeKmh, windKmh, dir) {
