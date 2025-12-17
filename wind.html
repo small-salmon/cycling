@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>單車坡度功率</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; margin: 18px; }
+    .card { max-width: 520px; margin: 0 auto; padding: 16px; border: 1px solid #ddd; border-radius: 14px; }
+    .title { font-size: 18px; font-weight: 800; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }
+    label { font-size: 14px; color: #333; }
+    input { width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; box-sizing: border-box; }
+    .out { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f6f6f6; line-height: 1.7; }
+    .big { font-size: 18px; font-weight: 900; }
+    .two { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 420px){ .two { grid-template-columns: 1fr; } }
+
+    /* 滾動選單外觀 */
+    .picker {
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+    select.wheel {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 18px;
+      border: none;
+      outline: none;
+      height: 180px;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    select.wheel option {
+      padding: 12px 10px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">單車坡度功率</div>
+
+    <div class="row">
+      <div class="two">
+        <div>
+          <label>體重 (kg)</label>
+          <input id="wPerson" type="number" inputmode="decimal" value="70" min="1" step="0.1">
+        </div>
+        <div>
+          <label>車重 (kg)</label>
+          <input id="wBike" type="number" inputmode="decimal" value="9" min="0" step="0.1">
+        </div>
+      </div>
+
+      <div>
+        <label>時速 (km/h)</label>
+        <input id="v" type="number" inputmode="decimal" value="30" min="1" step="0.1">
+      </div>
+
+      <div class="two">
+        <div>
+          <label>坡度（0–50% 滾動）</label>
+          <div class="picker">
+            <select id="gradeWheel" class="wheel" size="5"></select>
+          </div>
+        </div>
+
+        <div>
+          <label>風況（滾動）</label>
+          <div class="picker">
+            <select id="windWheel" class="wheel" size="5">
+              <option data-dir="head" value="0" selected>無風</option>
+              <option data-dir="tail" value="5">小順風</option>
+              <option data-dir="tail" value="15">大順風</option>
+              <option data-dir="tail" value="40">順超級颱風</option>
+              <option data-dir="head" value="5">小逆風</option>
+              <option data-dir="head" value="15">大逆風</option>
+              <option data-dir="head" value="40">逆超級颱風</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="out" class="out">請調整坡度/風況，會自動計算。</div>
+    </div>
+  </div>
+
+  <script>
+    const rho = 1.225;
+    const cda = 0.32;
+    const Crr = 0.005;
+    const g = 9.80665;
+
+    function aeroPower(vBikeKmh, windKmh, dir) {
+      const vBike = vBikeKmh / 3.6;
+      const w = Math.abs(windKmh) / 3.6;
+
+      let vRel;
+      if (dir === "head") vRel = vBike + w;
+      else if (dir === "tail") vRel = Math.max(0, vBike - w);
+      else vRel = vBike;
+
+      const Fdrag = 0.5 * rho * cda * (vRel ** 2);
+      const Paero = Fdrag * vBike;
+      return { vRel, Paero };
+    }
+
+    function climbAndRollPower(mTotalKg, vBikeKmh, gradePct) {
+      const v = vBikeKmh / 3.6;
+      const grade = gradePct / 100.0;
+
+      const denom = Math.sqrt(1 + grade*grade);
+      const sinT = grade / denom;
+      const cosT = 1 / denom;
+
+      const Fg = mTotalKg * g * sinT;
+      const Fr = Crr * mTotalKg * g * cosT;
+      const Pgr = (Fg + Fr) * v;
+
+      return { Pgr };
+    }
+
+    function getSelectedWind() {
+      const sel = document.getElementById("windWheel");
+      const opt = sel.options[sel.selectedIndex];
+      return {
+        name: opt.text,
+        kmh: parseFloat(opt.value) || 0,
+        dir: opt.dataset.dir || "head"
+      };
+    }
+
+    function getSelectedGrade() {
+      const sel = document.getElementById("gradeWheel");
+      const opt = sel.options[sel.selectedIndex];
+      return parseFloat(opt.value) || 0;
+    }
+
+    function calcAndRender() {
+      const wPerson = parseFloat(document.getElementById("wPerson").value);
+      const wBike   = parseFloat(document.getElementById("wBike").value);
+      const speed   = parseFloat(document.getElementById("v").value);
+
+      if (!Number.isFinite(wPerson) || wPerson <= 0 ||
+          !Number.isFinite(wBike)   || wBike < 0 ||
+          !Number.isFinite(speed)   || speed <= 0) {
+        document.getElementById("out").textContent = "請先填入正確的體重、車重、時速。";
+        return;
+      }
+
+      const grade = getSelectedGrade();
+      const wind = getSelectedWind();
+      const mTotal = wPerson + wBike;
+
+      const a  = aeroPower(speed, wind.kmh, wind.dir);
+      const cr = climbAndRollPower(mTotal, speed, grade);
+
+      const Ptotal = a.Paero + cr.Pgr;
+      const vRelKmh = a.vRel * 3.6;
+      const wkg     = Ptotal / mTotal;
+
+      document.getElementById("out").innerHTML =
+        `坡度：<b>${grade.toFixed(0)}%</b><br>` +
+        `風況：<b>${wind.name}</b><br>` +
+        `等效迎風：<b>${vRelKmh.toFixed(1)} km/h</b><br>` +
+        `總功率：<span class="big">${Ptotal.toFixed(0)} W</span><br>` +
+        `W/kg（人+車）：<b>${wkg.toFixed(2)} W/kg</b>`;
+    }
+
+    // 建立坡度 0~50 的滾動選單（整數）
+    (function initGradeWheel(){
+      const sel = document.getElementById("gradeWheel");
+      for (let i = 0; i <= 50; i++) {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = `${i}%`;
+        if (i === 5) opt.selected = true; // 預設 5%
+        sel.appendChild(opt);
+      }
+    })();
+
+    // 任何輸入/選擇改變 -> 自動計算
+    ["wPerson","wBike","v"].forEach(id => {
+      document.getElementById(id).addEventListener("input", calcAndRender);
+    });
+    document.getElementById("gradeWheel").addEventListener("change", calcAndRender);
+    document.getElementById("windWheel").addEventListener("change", calcAndRender);
+
+    // 首次載入就算一次
+    calcAndRender();
+  </script>
+</body>
+</html>
